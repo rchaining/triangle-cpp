@@ -52,9 +52,11 @@ fragment float4 fragment_main(VertexOut in [[stage_in]]) {
     // We use absolute value (fabs) so the back of the triangle lights up too 
     // (since we don't have a back-face culling enabled yet).
     float lightIntensity = saturate(dot(normal, lightDir));
+    lightIntensity = smoothstep(0.0, 1.0, lightIntensity);
     
     // Add a little "Ambient" light (0.1) so shadows aren't pitch black
-    float3 finalColor = in.color.rgb * (lightIntensity + 0.1);
+    // float3 finalColor = in.color.rgb * (lightIntensity + 0.1);
+    float3 finalColor = in.color.rgb * lightIntensity;
 
     return float4(finalColor, 1.0);
 }

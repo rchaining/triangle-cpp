@@ -19,6 +19,7 @@ private:
     MTL::Buffer* _vertexBuffer;
     int _vertexCount;
 
+    float _angleDelta;
     float _angle;
     
     void buildShaders();

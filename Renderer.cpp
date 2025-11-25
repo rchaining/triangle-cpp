@@ -8,11 +8,14 @@
 #include <iostream>
 #include <cmath>
 
+// /10 to slow it way down while I'm fiddling.
+const float angleChange = 0.05f/10.0f;
+
 struct Uniforms {
     float rotationMatrix[4][4];
 };
 
-Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f) {
+Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f), _angleDelta(angleChange) {
     // In C++, we need to retain objects we keep around
     _device->retain(); 
     _commandQueue = _device->newCommandQueue();
@@ -20,7 +23,7 @@ Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f) {
     buildBuffers();
 }
 
-Renderer::~Renderer() {\
+Renderer::~Renderer() {
     _vertexBuffer->release();
     _commandQueue->release();
     _pipelineState->release();
@@ -117,7 +120,7 @@ void Renderer::draw(CA::MetalLayer* layer) {
     MTL::RenderCommandEncoder* enc = cmdBuf->renderCommandEncoder(passDesc);
     enc->setRenderPipelineState(_pipelineState);
     
-    _angle += 0.05f; // Simplified for brevity
+    _angle += _angleDelta; // Simplified for brevity
     Uniforms u = makeRotation(_angle);
     
     // Bind buffer 0 -> object vertices
