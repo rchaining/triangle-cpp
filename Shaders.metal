@@ -37,6 +37,24 @@ vertex VertexOut vertex_main(device const VertexIn* vertices [[buffer(0)]], // R
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]]) {
-    // Just return the color we read from the file (or defaults)
-    return in.color;
+    // 1. Calculate the Normal on the fly
+    // We take the derivative (slope) of the position relative to the screen X and Y.
+    // The Cross Product of these two slopes gives us the vector pointing "out" of the triangle.
+    float3 dpdx = dfdx(in.position.xyz);
+    float3 dpdy = dfdy(in.position.xyz);
+    float3 normal = normalize(cross(dpdx, dpdy));
+
+    // 2. Define a simple Light Direction (coming from top-right)
+    float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
+
+    // 3. Calculate "Dot Product" (Diffuse Lighting)
+    // If the normal points AT the light, this number is 1.0. If away, it's 0.0.
+    // We use absolute value (fabs) so the back of the triangle lights up too 
+    // (since we don't have a back-face culling enabled yet).
+    float lightIntensity = saturate(dot(normal, lightDir));
+    
+    // Add a little "Ambient" light (0.1) so shadows aren't pitch black
+    float3 finalColor = in.color.rgb * (lightIntensity + 0.1);
+
+    return float4(finalColor, 1.0);
 }

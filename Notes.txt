@@ -1,0 +1,21 @@
+Just some notes while I'm fiddling.
+Started after I already have the monkey head loaded and spinning, just added the funny lighting hack.
+
+Gemini mentioned it would look funny because we haven't added a z-buffer yet. This wasn't true. I noted
+it's probably b/c there is no lighting and it's solid white rn, so I wouldn't be able to see that. It
+was like "yeah, but also let me show you a cool trick to calculate normals instead of reading them
+in from the obj file"
+
+Oh....kay.......
+
+Get derivative of the depth values in the x and y. That's the slope, and cross product gives the normal.
+Makes sense when you think about it, and it's neat. You're limited by the pixel resolution kinda, and it
+would probably suffer from a lack of smoothing (?).
+
+Code replicated here as this will change:
+    float3 dpdx = dfdx(in.position.xyz);
+    float3 dpdy = dfdy(in.position.xyz);
+    float3 normal = normalize(cross(dpdx, dpdy));
+
+Which is neat partially b/c the dfdx, dfdy are both apparently built-ins. Same with normalize/cross but I knew that.
+I'm curious if dfdx/dfdy is also automagically sampling neighbor kernels?
