@@ -19,3 +19,16 @@ Code replicated here as this will change:
 
 Which is neat partially b/c the dfdx, dfdy are both apparently built-ins. Same with normalize/cross but I knew that.
 I'm curious if dfdx/dfdy is also automagically sampling neighbor kernels?
+
+...
+
+Okay added some changes for writing the depth. You use the zbuffer to cull
+objects behind other objects, and I thought I'd be able to just go at it.
+I wanted to do something like getting a derivative of depth for curvature highlights
+
+Gemini pointed out "you cannot read from a texture at the same time you are writing to it"
+"If you are drawing the [object] you are writing to the depth buffer. To read it for
+edge detection you need Two-Pass Render".
+
+So I can't read the depth tex while I'm drawing the object. It sounds like that's
+because the depth texture is being generated at that same time actually.
