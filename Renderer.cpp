@@ -1,0 +1,94 @@
+// We need to define these implementations in EXACTLY one .cpp file
+#define NS_PRIVATE_IMPLEMENTATION
+#define CA_PRIVATE_IMPLEMENTATION
+#define MTL_PRIVATE_IMPLEMENTATION
+
+#include "Renderer.hpp"
+#include <iostream>
+#include <cmath>
+
+struct Uniforms {
+    float rotationMatrix[4][4];
+};
+
+Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f) {
+    // In C++, we need to retain objects we keep around
+    _device->retain(); 
+    _commandQueue = _device->newCommandQueue();
+    buildShaders();
+}
+
+Renderer::~Renderer() {
+    _commandQueue->release();
+    _pipelineState->release();
+    _device->release();
+}
+
+void Renderer::buildShaders() {
+    // Pure C++ way to load the library
+    MTL::Library* defaultLibrary = _device->newDefaultLibrary();
+    
+    // We need to wrap C-strings in NS::String for Metal
+    NS::String* vertexName = NS::String::string("vertex_main", NS::UTF8StringEncoding);
+    NS::String* fragName = NS::String::string("fragment_main", NS::UTF8StringEncoding);
+    
+    MTL::Function* vertexFn = defaultLibrary->newFunction(vertexName);
+    MTL::Function* fragFn = defaultLibrary->newFunction(fragName);
+    
+    MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
+    desc->setVertexFunction(vertexFn);
+    desc->setFragmentFunction(fragFn);
+    desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormat::PixelFormatBGRA8Unorm);
+    
+    NS::Error* error = nullptr;
+    _pipelineState = _device->newRenderPipelineState(desc, &error);
+    if (!_pipelineState) {
+        std::cerr << "Failed to create pipeline state: " << error->localizedDescription()->utf8String() << std::endl;
+    }
+
+    vertexFn->release();
+    fragFn->release();
+    desc->release();
+    defaultLibrary->release();
+    vertexName->release(); // NS::String must be released
+    fragName->release();
+}
+
+// Helper for math
+Uniforms makeRotation(float angleRadians) {
+    float c = cos(angleRadians);
+    float s = sin(angleRadians);
+    Uniforms u;
+    for(int i=0; i<4; i++) for(int j=0; j<4; j++) u.rotationMatrix[i][j] = (i==j ? 1.0f : 0.0f);
+    u.rotationMatrix[0][0] = c;
+    u.rotationMatrix[0][1] = s;
+    u.rotationMatrix[1][0] = -s;
+    u.rotationMatrix[1][1] = c;
+    return u;
+}
+
+void Renderer::draw(CA::MetalLayer* layer) {
+    // Entry into the C++ layer, called by the main loop in ObjC.
+    CA::MetalDrawable* drawable = layer->nextDrawable();
+    if (!drawable) return;
+
+    MTL::CommandBuffer* cmdBuf = _commandQueue->commandBuffer();
+    
+    MTL::RenderPassDescriptor* passDesc = MTL::RenderPassDescriptor::renderPassDescriptor();
+    passDesc->colorAttachments()->object(0)->setTexture(drawable->texture());
+    passDesc->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
+    passDesc->colorAttachments()->object(0)->setClearColor(MTL::ClearColor::Make(0, 0, 0, 1));
+    
+    MTL::RenderCommandEncoder* enc = cmdBuf->renderCommandEncoder(passDesc);
+    enc->setRenderPipelineState(_pipelineState);
+    
+    _angle += 0.05f; // Simplified for brevity
+    Uniforms u = makeRotation(_angle);
+    
+    enc->setVertexBytes(&u, sizeof(u), 1);
+    enc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
+    
+    enc->endEncoding();
+    cmdBuf->presentDrawable(drawable);
+    cmdBuf->commit();
+}
