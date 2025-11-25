@@ -17,7 +17,7 @@ private:
     MTL::RenderPipelineState* _pipelineState;
     MTL::DepthStencilState* _depthStencilState;
 
-    MTL:Texture* _depthTexture; // Cheat temp depth tex.
+    MTL::Texture* _depthTexture; // Cheat temp depth tex.
     MTL::Buffer* _vertexBuffer;
     int _vertexCount;
 

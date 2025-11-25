@@ -159,8 +159,8 @@ void Renderer::buildDepthTexture() {
     MTL::TextureDescriptor* texDesc = MTL::TextureDescriptor::texture2DDescriptor(MTL::PixelFormatDepth32Float,
     1000, 1000, false); // Match window size -- make configurable or read window size dynamically
 
-    textureDesc->setUsage(MTL::TextureUsageRenderTarget);
-    textureDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
+    texDesc->setUsage(MTL::TextureUsageRenderTarget);
+    texDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
     
-    _depthTexture = _device->newTexture(textureDesc);
+    _depthTexture = _device->newTexture(texDesc);
 }
