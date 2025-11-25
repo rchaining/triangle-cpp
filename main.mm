@@ -42,6 +42,7 @@ int main() {
 
     while (true) {
         NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+        if (![window isVisible]){ break; }
         NSEvent* event;
         while ((event = [app nextEventMatchingMask:NSEventMaskAny 
                                          untilDate:nil 
