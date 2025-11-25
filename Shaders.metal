@@ -1,27 +1,42 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// 1. Define the incoming data structure
+// This matches the "Vertex" struct in our C++ code exactly.
+struct VertexIn {
+    float4 position;
+    float4 color;
+};
+
+// 2. Define the data passing from Vertex -> Fragment
+struct VertexOut {
+    float4 position [[position]]; // Tag with position for the GPU (Why is this necessary?)
+    float4 color;
+};
+
 struct Uniforms {
     float4x4 rotationMatrix;
 };
 
-// Vertex shader
-// Runs once for every corner of the triangle (3 times total)
-vertex float4 vertex_main(uint vertex_id [[vertex_id]],
-                          constant Uniforms &uniforms [[buffer(1)]]) {
-    // Define triangle positions
-    float4 positions[] = {
-        float4(0.0, 0.5, 0.0, 1.0), // Top Center
-        float4(-0.5, -0.5, 0.0, 1.0), // Bottom Left
-        float4(0.5, -0.5, 0.0, 1.0) // Bottom Right
-    };
-    // Return position that matches current ID (0, 1, or 2)
-    return uniforms.rotationMatrix * positions[vertex_id];
+vertex VertexOut vertex_main(device const VertexIn* vertices [[buffer(0)]], // Read array from Buffer 0
+                             constant Uniforms &uniforms   [[buffer(1)]], // Read matrix from Buffer 1
+                             uint vertexId                 [[vertex_id]]) // Current index
+{
+    VertexOut out;
+    
+    // Grab the vertex from the array using the index
+    float4 pos = vertices[vertexId].position;
+    
+    // Apply rotation
+    out.position = uniforms.rotationMatrix * pos;
+    
+    // Pass the color through to the fragment shader
+    out.color = vertices[vertexId].color;
+    
+    return out;
 }
 
-// Fragment shader
-// Runs for every pixel in the triangle.
-fragment float4 fragment_main(){
-    // Solid red (RGBA -> 1,0,0,1)
-    return float4(1.0, 0.0, 0.0, 1.0);
+fragment float4 fragment_main(VertexOut in [[stage_in]]) {
+    // Just return the color we read from the file (or defaults)
+    return in.color;
 }

@@ -4,6 +4,7 @@
 #define MTL_PRIVATE_IMPLEMENTATION
 
 #include "Renderer.hpp"
+#include "MeshLoader.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -16,9 +17,11 @@ Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f) {
     _device->retain(); 
     _commandQueue = _device->newCommandQueue();
     buildShaders();
+    buildBuffers();
 }
 
-Renderer::~Renderer() {
+Renderer::~Renderer() {\
+    _vertexBuffer->release();
     _commandQueue->release();
     _pipelineState->release();
     _device->release();
@@ -54,6 +57,18 @@ void Renderer::buildShaders() {
     fragName->release();
 }
 
+void Renderer::buildBuffers() {
+    // monke.obj should be in the same folder as the executable
+    std::vector<Vertex> mesh = MeshLoader::loadObj("monke.obj");
+    _vertexCount = mesh.size();
+    size_t dataSize = mesh.size() * sizeof(Vertex);
+    // Create GPU buffer
+    // MTLResourceStorageModeShared = CPU writes, GPU reads
+    _vertexBuffer = _device->newBuffer(dataSize, MTL::ResourceStorageModeShared);
+    // Copy data from C++ Vector to Metal Buffer
+    memcpy(_vertexBuffer->contents(), mesh.data(), dataSize);
+}
+
 // Helper for math
 Uniforms makeRotation(float angleRadians) {
     float c = cos(angleRadians);
@@ -85,8 +100,14 @@ void Renderer::draw(CA::MetalLayer* layer) {
     _angle += 0.05f; // Simplified for brevity
     Uniforms u = makeRotation(_angle);
     
+    // Bind buffer 0 -> object vertices
+    enc->setVertexBuffer(_vertexBuffer, 0, 0);
+
+    // Bind buffer 1 -> Rotation matrix
     enc->setVertexBytes(&u, sizeof(u), 1);
-    enc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
+
+    // Draw
+    enc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)_vertexCount);
     
     enc->endEncoding();
     cmdBuf->presentDrawable(drawable);
