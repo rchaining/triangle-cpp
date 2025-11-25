@@ -74,11 +74,24 @@ Uniforms makeRotation(float angleRadians) {
     float c = cos(angleRadians);
     float s = sin(angleRadians);
     Uniforms u;
+
+    // Initialize identity matrix
+    // For loop will output:
+    // [[1, 0, 0, 0],
+    //  [0, 1, 0, 0],
+    //  [0, 0, 1, 0],
+    //  [0, 0, 0, 1]]
     for(int i=0; i<4; i++) for(int j=0; j<4; j++) u.rotationMatrix[i][j] = (i==j ? 1.0f : 0.0f);
+    // Then make it into a rotation matrix:
     u.rotationMatrix[0][0] = c;
     u.rotationMatrix[0][1] = s;
     u.rotationMatrix[1][0] = -s;
     u.rotationMatrix[1][1] = c;
+    // This leaves it as:
+    // [[c, -s, 0, 0],
+    //  [s, c, 0, 0],
+    //  [0, 0, 1, 0],
+    //  [0, 0, 0, 1]]
     return u;
 }
 
