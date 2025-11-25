@@ -37,7 +37,7 @@ fragment float4 fragment_main(VertexOut in [[stage_in]]) {
     float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
     float lightIntensity = saturate(dot(normal, lightDir));
     // Smoothstep the lighting to help push the shadows a bit for visibility.
-    lightIntensity = smoothstep(0.0, 1.0, lightIntensity);    
+    lightIntensity = smoothstep(0.0, 1.0, lightIntensity);
     float3 finalColor = in.color.rgb * (lightIntensity + 0.1);
 
     return float4(finalColor, 1.0);
@@ -87,7 +87,10 @@ fragment float4 post_fragment_main(
                       fabs(depth - dUp)   + fabs(depth - dDown);
     
     // Threshold: If difference is high, make it white.
-    float edge = step(0.01, depthDiff); // 0.01 is sensitivity
+    const float EDGE_SENSITIVITY = 0.05;
+    // float edge = step(EDGE_SENSITIVITY, depthDiff); // 0.01 is sensitivity
+    float edge = smoothstep(0.0, EDGE_SENSITIVITY, depthDiff);
+    edge = edge * edge;
     // If difference is high, we're at the bottom of a bowl remember.
 
     return originalColor + float4(edge, edge, edge, 1.0);
