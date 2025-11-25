@@ -32,3 +32,9 @@ edge detection you need Two-Pass Render".
 
 So I can't read the depth tex while I'm drawing the object. It sounds like that's
 because the depth texture is being generated at that same time actually.
+
+Pass 1: Rendering the object into invisible "offscreen textures" (Color + depth)
+Pass 2: Render these textures into a large triangle covering the whole screen.
+    -> This triangle's shader reads depth tex from pass 1, and paints to the screen.
+
+Moved a copy of the old, "single pass" shader into Shaders_Single_Pass.metal, for posterity.

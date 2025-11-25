@@ -51,7 +51,6 @@ fragment float4 fragment_main(VertexOut in [[stage_in]]) {
     // If the normal points AT the light, this number is 1.0. If away, it's 0.0.
     // We use absolute value (fabs) so the back of the triangle lights up too 
     // (since we don't have a back-face culling enabled yet).
-    // (Note: We now have depth culling, so for manifold objects this shouldn't be an issue)
     float lightIntensity = saturate(dot(normal, lightDir));
     lightIntensity = smoothstep(0.0, 1.0, lightIntensity);
     
