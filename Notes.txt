@@ -33,8 +33,30 @@ edge detection you need Two-Pass Render".
 So I can't read the depth tex while I'm drawing the object. It sounds like that's
 because the depth texture is being generated at that same time actually.
 
+Moved a copy of the old, "single pass" shader into Shaders_Single_Pass.metal, for posterity.
+I'm going to dive into this shader a bit more before I move on to the 2pass.
+
+Shaders.metal has "VertexIn", "VertexOut". VertexIn must match C++ code. VertexOut returned
+by vertex_main, and accepted as arg to fragment_main, as `VertexOut in [[stage_in]]`.
+Q: How does that plumbing work to connect the input of frag to the output of vert?
+A: "Rasterizer". A step b/t the two shader fns.
+[[stage_in]] keyword tells compiler, "This argument comes from rasterizer". Without it,
+the compiler would think we're passing it from the CPU. We'd need to fill a buffer, and
+have some [[buffer(n)]] where [[stage_in]] is now.
+
+Interesting note: Gemini says the Rasterizer "blends" the values of VertexOut for all three
+corner vertices, based on how close that vertex is to the pixel. This is actually somewhat how
+normal smoothing works in blender! If this is true, perhaps we could calculat the normal value
+in the vertex shader and pass it in, getting smoothed normals for free?
+
+Ah, not exactly. First, dfdx/dfdy are available only fragment shaders, so not in vert_main.
+Second, as I understand it, the vertices here don't know about their neighbors.
+Gemini wants me to pre-calculate normals on the CPU, which seems silly. I don't plan to go
+through it here, but I bet I could pass in the neighbors as a buffer and calculate a
+vertex normal using these.
+For dfdx, see: https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf p.214
+(Also: hell yeah for that doc)
+
 Pass 1: Rendering the object into invisible "offscreen textures" (Color + depth)
 Pass 2: Render these textures into a large triangle covering the whole screen.
     -> This triangle's shader reads depth tex from pass 1, and paints to the screen.
-
-Moved a copy of the old, "single pass" shader into Shaders_Single_Pass.metal, for posterity.
