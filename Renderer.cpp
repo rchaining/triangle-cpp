@@ -21,7 +21,7 @@ Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f), _angleD
     _commandQueue = _device->newCommandQueue();
     buildShaders();
     buildBuffers();
-    buildDepthTexture();
+    buildFirstPassTex();
 }
 
 Renderer::~Renderer() {
@@ -30,6 +30,8 @@ Renderer::~Renderer() {
     _pipelineState->release();
     _device->release();
     _depthStencilState->release();
+    _offscreenColorTexture->release();
+    _depthTexture->release();
 }
 
 void Renderer::buildShaders() {
@@ -43,13 +45,13 @@ void Renderer::buildShaders() {
         assert( false );
     }
     
-    // We need to wrap C-strings in NS::String for Metal
+    // Build functions
     NS::String* vertexName = NS::String::string("vertex_main", NS::UTF8StringEncoding);
     NS::String* fragName = NS::String::string("fragment_main", NS::UTF8StringEncoding);
-    
     MTL::Function* vertexFn = pLibrary->newFunction(vertexName);
     MTL::Function* fragFn = pLibrary->newFunction(fragName);
     
+
     MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
     desc->setVertexFunction(vertexFn);
     desc->setFragmentFunction(fragFn);
@@ -68,13 +70,34 @@ void Renderer::buildShaders() {
     depthDesc->setDepthWriteEnabled(true); // "Update the depth buffer when drawing"
     _depthStencilState = _device->newDepthStencilState(depthDesc);
 
+    // Post-Process Pipeline
+    //Fns
+    NS::String* postVertName = NS::String::string("post_vertex_main", NS::UTF8StringEncoding);
+    NS::String* postFragName = NS::String::string("post_fragment_main", NS::UTF8StringEncoding);
+    MTL::Function* postVertFn = pLibrary->newFunction(postVertName);
+    MTL::Function* postFragFn = pLibrary->newFunction(postFragName);
+
+    // Descriptor
+    MTL::RenderPipelineDescriptor* postDesc = MTL::RenderPipelineDescriptor::alloc()->init();
+    postDesc->setVertexFunction(postVertFn);
+    postDesc->setFragmentFunction(postFragFn);
+    postDesc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    postDesc->setDepthAttachmentPixelFormat(MTL::PixelFormatInvalid); // Post-process does not use depth testing, b/c flat image
+
+    // Cleanup
     depthDesc->release();
     vertexFn->release();
     fragFn->release();
     desc->release();
     pLibrary->release();
-    vertexName->release(); // NS::String must be released
+    vertexName->release();
     fragName->release();
+    postVertName->release();
+    postFragName->release();
+    postVertFn->release();
+    postFragFn->release();
+    postDesc->release();
+    pError->release();
 }
 
 void Renderer::buildBuffers() {
@@ -116,51 +139,72 @@ Uniforms makeRotation(float angleRadians) {
 }
 
 void Renderer::draw(CA::MetalLayer* layer) {
-    // Entry into the C++ layer, called by the main loop in ObjC.
     CA::MetalDrawable* drawable = layer->nextDrawable();
     if (!drawable) return;
 
     MTL::CommandBuffer* cmdBuf = _commandQueue->commandBuffer();
-    
-    MTL::RenderPassDescriptor* passDesc = MTL::RenderPassDescriptor::renderPassDescriptor();
-    passDesc->colorAttachments()->object(0)->setTexture(drawable->texture());
-    passDesc->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
-    passDesc->colorAttachments()->object(0)->setClearColor(MTL::ClearColor::Make(0, 0, 0, 1));
-    
-    // Attach depth buffer
-    MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = passDesc->depthAttachment();
-    depthAttachment->setTexture(_depthTexture);
-    depthAttachment->setLoadAction(MTL::LoadActionClear);
-    depthAttachment->setStoreAction(MTL::StoreActionDontCare);
-    depthAttachment->setClearDepth(1.0); // Clear to "Far Away"
 
-    MTL::RenderCommandEncoder* enc = cmdBuf->renderCommandEncoder(passDesc);
-    enc->setRenderPipelineState(_pipelineState);
-    enc->setDepthStencilState(_depthStencilState);
-
-    _angle += _angleDelta; // Simplified for brevity
+    // Pass 1: Render object and depth to offscreen tex
+    MTL::RenderPassDescriptor* pass1 = MTL::RenderPassDescriptor::renderPassDescriptor();
+    // Set color
+    pass1->colorAttachments()->object(0)->setTexture(_offscreenColorTexture);
+    pass1->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
+    pass1->colorAttachments()->object(0)->setClearColor(MTL::ClearColor::Make(0.1, 0.1, 0.1, 1));
+    pass1->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore); // Save for Pass 2!
+    // Set depth
+    pass1->depthAttachment()->setTexture(_depthTexture);
+    pass1->depthAttachment()->setLoadAction(MTL::LoadActionClear);
+    pass1->depthAttachment()->setStoreAction(MTL::StoreActionStore); // Save for Pass 2!
+    pass1->depthAttachment()->setClearDepth(1.0);
+    // Set uniforms and encode first pass
+    MTL::RenderCommandEncoder* enc1 = cmdBuf->renderCommandEncoder(pass1);
+    enc1->setRenderPipelineState(_pipelineState);
+    enc1->setVertexBuffer(_vertexBuffer, 0, 0);
+    _angle += _angleDelta;
     Uniforms u = makeRotation(_angle);
     
-    // Bind buffer 0 -> object vertices
-    enc->setVertexBuffer(_vertexBuffer, 0, 0);
+    enc1->setVertexBuffer(_vertexBuffer, 0, 0);
+    enc1->setVertexBytes(&u, sizeof(u), 1);
+    enc1->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)_vertexCount);
+    enc1->endEncoding();
 
-    // Bind buffer 1 -> Rotation matrix
-    enc->setVertexBytes(&u, sizeof(u), 1);
+    // Pass 2 (post-processor): Render fullscreen quad using results from Pass 1
+    MTL::RenderPassDescriptor* pass2 = MTL::RenderPassDescriptor::renderPassDescriptor();
 
-    // Draw
-    enc->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)_vertexCount);
-    
-    enc->endEncoding();
+    // Output tex to the real screen (drawable)
+    pass2->colorAttachments()->object(0)->setTexture(drawable->texture());
+    pass2->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionDontCare); // Overwriting anyway
+    pass2->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
+
+    // Encode pass 2
+    MTL::RenderCommandEncoder* enc2 = cmdBuf->renderCommandEncoder(pass2);
+    enc2->setRenderPipelineState(_postPipelineState);
+    // Inputs (the textures from pass 1)
+    enc2->setFragmentTexture(_offscreenColorTexture, 0);
+    enc2->setFragmentTexture(_depthTexture, 1);
+    // Draw 3 vertices (The shader generates the fullscreen triangle coordinates automatically)
+    enc2->drawPrimitives(MTL::PrimitiveTypeTriangle, (NS::UInteger)0, (NS::UInteger)3);
+    enc2->endEncoding();
+    // --- Commit ---
     cmdBuf->presentDrawable(drawable);
     cmdBuf->commit();
 }
 
-void Renderer::buildDepthTexture() {
-    MTL::TextureDescriptor* texDesc = MTL::TextureDescriptor::texture2DDescriptor(MTL::PixelFormatDepth32Float,
-    1000, 1000, false); // Match window size -- make configurable or read window size dynamically
-
-    texDesc->setUsage(MTL::TextureUsageRenderTarget);
-    texDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
+void Renderer::buildFirstPassTex() {
+    // Depth texture
+    // Match window size -- make configurable or read window size dynamically
+    int l, w = 1000;
+    MTL::TextureDescriptor* depthDesc = MTL::TextureDescriptor::texture2DDescriptor(MTL::PixelFormatDepth32Float, l, w, false);
+    depthDesc->setUsage(MTL::TextureUsageRenderTarget);
+    depthDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
+    _depthTexture = _device->newTexture(depthDesc);
+    depthDesc->release();
     
-    _depthTexture = _device->newTexture(texDesc);
+    // First pass texture
+    MTL::TextureDescriptor* colorDesc = MTL::TextureDescriptor::texture2DDescriptor(
+        MTL::PixelFormatBGRA8Unorm, l, w, false);
+    colorDesc->setUsage(MTL::TextureUsageRenderTarget | MTL::TextureUsageShaderRead); // Allow Reading!
+    colorDesc->setStorageMode(MTL::StorageModePrivate);
+    _offscreenColorTexture = _device->newTexture(colorDesc);
+    colorDesc->release();
 }

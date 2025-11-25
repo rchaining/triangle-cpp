@@ -15,8 +15,10 @@ private:
     MTL::Device* _device;
     MTL::CommandQueue* _commandQueue;
     MTL::RenderPipelineState* _pipelineState;
+    MTL::RenderPipelineState* _postPipelineState; // Pipeline for pass 2
     MTL::DepthStencilState* _depthStencilState;
 
+    MTL::Texture* _offscreenColorTexture; // Hold output of pass 1.
     MTL::Texture* _depthTexture; // Cheat temp depth tex.
     MTL::Buffer* _vertexBuffer;
     int _vertexCount;
@@ -26,5 +28,5 @@ private:
     
     void buildShaders();
     void buildBuffers();
-    void buildDepthTexture();
+    void buildFirstPassTex();
 };

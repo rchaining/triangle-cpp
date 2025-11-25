@@ -60,3 +60,59 @@ For dfdx, see: https://developer.apple.com/metal/Metal-Shading-Language-Specific
 Pass 1: Rendering the object into invisible "offscreen textures" (Color + depth)
 Pass 2: Render these textures into a large triangle covering the whole screen.
     -> This triangle's shader reads depth tex from pass 1, and paints to the screen.
+
+The color and depths are passed as textures to the post process shader. Sampled with:
+`
+constexpr sampler s(address::clamp_to_edge, filter::linear); // See doc for things like clamp_to_edge info
+float4 originalColor = colorTexture.sample(s, in.uv);
+float depth = depthTexture.sample(s, in.uv).r; // 0 = near, 1.0 = far
+`
+sampler returns a float4. <Float/Int/etc>4s are often positions or colors and so can be indexed in two easy
+ways, presumably for readability, using either .x, .y, z, .w; or .r, .g, .b, .a.
+.x and .r are analogous and point to the same location.
+
+Running a filter off the depth:
+float dLeft  = depthTexture.sample(s, in.uv + float2(-offset, 0)).r;
+float dRight = depthTexture.sample(s, in.uv + float2( offset, 0)).r;
+float dUp    = depthTexture.sample(s, in.uv + float2(0, -offset)).r;
+float dDown  = depthTexture.sample(s, in.uv + float2(0,  offset)).r;
+
+// Simple Laplacian filter
+float depthDiff = fabs(depth - dLeft) + fabs(depth - dRight) + 
+                    fabs(depth - dUp)   + fabs(depth - dDown);
+
+"Laplacian": *Divergence* of the *gradient* of a scalar function.
+DIVERGENCE of the GRADIENT. So given some point p, it's the measure how much the
+surrounding points are flowing away from p. Right? Double check with the robot.
+* Measures the "net flow" or "flux" of gradient vectors out of point p.
+* The gradient points uphill!
+* If the Laplacian is positive, the *net* flow is OUTWARD from p.
+    * Because gradient points uphill, that means the value of p is *LESS* than its neighbors
+    * Like the bottom of a bowl
+* If the Laplacian is negative, the *net* flow is INWARD towards p.
+    * So like the top of a hill here.
+* Laplacian = 0, net flow is even
+    * Could be flat, or some other novel shapes. I think a saddle shape ought to work?
+
+For n dimensions, the Laplacian is the sum of the derivative of each dimension.
+
+In the draw function:
+pass1->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore); // Save for Pass 2!
+MTL::StoreActionStore is what appears to cause metal to write to our designated buffer.
+
+We additionally have:
+1. pass1->colorAttachments()->object(0)->setTexture(_offscreenColorTexture); 
+2. pass2->colorAttachments()->object(0)->setTexture(drawable->texture());
+drawable->texture() is the screen, and _offscreenColorTexture is a texture we save for postprocess.
+
+So along with the storeaction, we use setTexture to control the place where the texture is written.
+
+Now we're getting to the meat of things. I see the general shader pass processes here, though.
+Shader pass describes its texture outputs, then inputs, then encodes it.
+So we could theoretically have a vertex pass outputting stuff like obj ids, light maps for each 
+light source, etc. Then we can have a chain of post-process shaders encapsulated as objects of some
+PostProcessor class. Input of each class is the path to the shader code. Then at the end we attach
+a final write to screen with the output tex of the final shader in the post-processor chain.
+
+How to attach funny vertex shaders now? I.e. wobble the vertices, or push the vertices down for an
+animal crossing "cylinder world" affect.
