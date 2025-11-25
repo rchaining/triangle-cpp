@@ -15,7 +15,9 @@ private:
     MTL::Device* _device;
     MTL::CommandQueue* _commandQueue;
     MTL::RenderPipelineState* _pipelineState;
+    MTL::DepthStencilState* _depthStencilState;
 
+    MTL:Texture* _depthTexture; // Cheat temp depth tex.
     MTL::Buffer* _vertexBuffer;
     int _vertexCount;
 
@@ -24,4 +26,5 @@ private:
     
     void buildShaders();
     void buildBuffers();
+    void buildDepthTexture();
 };

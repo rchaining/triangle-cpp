@@ -21,6 +21,7 @@ Renderer::Renderer(MTL::Device* device) : _device(device), _angle(0.0f), _angleD
     _commandQueue = _device->newCommandQueue();
     buildShaders();
     buildBuffers();
+    buildDepthTexture();
 }
 
 Renderer::~Renderer() {
@@ -28,6 +29,7 @@ Renderer::~Renderer() {
     _commandQueue->release();
     _pipelineState->release();
     _device->release();
+    _depthStencilState->release();
 }
 
 void Renderer::buildShaders() {
@@ -52,13 +54,21 @@ void Renderer::buildShaders() {
     desc->setVertexFunction(vertexFn);
     desc->setFragmentFunction(fragFn);
     desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormat::PixelFormatBGRA8Unorm);
-    
+    desc->setDepthAttachmentPixelFormat(MTL::PixelFormat::PixelFormatDepth32Float);
+
     NS::Error* error = nullptr;
     _pipelineState = _device->newRenderPipelineState(desc, &error);
     if (!_pipelineState) {
         std::cerr << "Failed to create pipeline state: " << error->localizedDescription()->utf8String() << std::endl;
     }
 
+    // Create Depth/Stencil State
+    MTL::DepthStencilDescriptor* depthDesc = MTL::DepthStencilDescriptor::alloc()->init();
+    depthDesc->setDepthCompareFunction(MTL::CompareFunctionLess); // "Only draw if closer"
+    depthDesc->setDepthWriteEnabled(true); // "Update the depth buffer when drawing"
+    _depthStencilState = _device->newDepthStencilState(depthDesc);
+
+    depthDesc->release();
     vertexFn->release();
     fragFn->release();
     desc->release();
@@ -117,9 +127,17 @@ void Renderer::draw(CA::MetalLayer* layer) {
     passDesc->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
     passDesc->colorAttachments()->object(0)->setClearColor(MTL::ClearColor::Make(0, 0, 0, 1));
     
+    // Attach depth buffer
+    MTL::RenderPassDepthAttachmentDescriptor* depthAttachment = passDesc->depthAttachment();
+    depthAttachment->setTexture(_depthTexture);
+    depthAttachment->setLoadAction(MTL::LoadActionClear);
+    depthAttachment->setStoreAction(MTL::StoreActionDontCare);
+    depthAttachment->setClearDepth(1.0); // Clear to "Far Away"
+
     MTL::RenderCommandEncoder* enc = cmdBuf->renderCommandEncoder(passDesc);
     enc->setRenderPipelineState(_pipelineState);
-    
+    enc->setDepthStencilState(_depthStencilState);
+
     _angle += _angleDelta; // Simplified for brevity
     Uniforms u = makeRotation(_angle);
     
@@ -135,4 +153,14 @@ void Renderer::draw(CA::MetalLayer* layer) {
     enc->endEncoding();
     cmdBuf->presentDrawable(drawable);
     cmdBuf->commit();
+}
+
+void Renderer::buildDepthTexture() {
+    MTL::TextureDescriptor* texDesc = MTL::TextureDescriptor::texture2DDescriptor(MTL::PixelFormatDepth32Float,
+    1000, 1000, false); // Match window size -- make configurable or read window size dynamically
+
+    textureDesc->setUsage(MTL::TextureUsageRenderTarget);
+    textureDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
+    
+    _depthTexture = _device->newTexture(textureDesc);
 }

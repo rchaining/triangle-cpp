@@ -5,12 +5,16 @@
 // Include our C++ Renderer
 #include "Renderer.hpp"
 
+const int WIDTH = 1000;
+const int HEIGHT = 1000;
+
+
 int main() {
     NSApplication* app = [NSApplication sharedApplication];
     [app setActivationPolicy:NSApplicationActivationPolicyRegular];
 
     // ... (Window Setup Code is same as before) ...
-    NSRect frame = NSMakeRect(0, 0, 800, 600);
+    NSRect frame = NSMakeRect(0, 0, WIDTH, HEIGHT);
     NSWindow* window = [[NSWindow alloc] initWithContentRect:frame
                                                    styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable)
                                                      backing:NSBackingStoreBuffered
