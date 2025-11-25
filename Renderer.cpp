@@ -28,15 +28,22 @@ Renderer::~Renderer() {\
 }
 
 void Renderer::buildShaders() {
-    // Pure C++ way to load the library
-    MTL::Library* defaultLibrary = _device->newDefaultLibrary();
+    // Load the library
+    NS::Error* pError = nullptr;
+    // Update path to match the Makefile's build directory
+    MTL::Library* pLibrary = _device->newLibrary( NS::String::string("./build/default.metallib", NS::UTF8StringEncoding), &pError );
+    if ( !pLibrary )
+    {
+        __builtin_printf( "%s", pError->localizedDescription()->utf8String() );
+        assert( false );
+    }
     
     // We need to wrap C-strings in NS::String for Metal
     NS::String* vertexName = NS::String::string("vertex_main", NS::UTF8StringEncoding);
     NS::String* fragName = NS::String::string("fragment_main", NS::UTF8StringEncoding);
     
-    MTL::Function* vertexFn = defaultLibrary->newFunction(vertexName);
-    MTL::Function* fragFn = defaultLibrary->newFunction(fragName);
+    MTL::Function* vertexFn = pLibrary->newFunction(vertexName);
+    MTL::Function* fragFn = pLibrary->newFunction(fragName);
     
     MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
     desc->setVertexFunction(vertexFn);
@@ -52,7 +59,7 @@ void Renderer::buildShaders() {
     vertexFn->release();
     fragFn->release();
     desc->release();
-    defaultLibrary->release();
+    pLibrary->release();
     vertexName->release(); // NS::String must be released
     fragName->release();
 }
