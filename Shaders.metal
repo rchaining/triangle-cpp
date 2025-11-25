@@ -4,6 +4,7 @@ using namespace metal;
 // This matches the "Vertex" struct in our C++ code exactly.
 struct VertexIn {
     float4 position;
+    float4 normal;
     float4 color;
 };
 
@@ -14,6 +15,7 @@ struct Uniforms {
 // Passed from Vertex shader to Fragment
 struct VertexOut {
     float4 position [[position]]; // Tag with position for the GPU (Why is this necessary?)
+    float3 normal;
     float4 color;
 };
 
@@ -24,16 +26,13 @@ vertex VertexOut vertex_main(device const VertexIn* vertices [[buffer(0)]], // R
     VertexOut out;
     float4 pos = vertices[vertexId].position;
     out.position = uniforms.rotationMatrix * pos;
+    out.normal = (uniforms.rotationMatrix * vertices[vertexId].normal).xyz; // Rotate normal as well
     out.color = vertices[vertexId].color;
     return out;
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]]) {
-    // Quick and dirty lighting
-    // Normal calc using slope of vertex pos, light direction up top.
-    float3 dpdx = dfdx(in.position.xyz);
-    float3 dpdy = dfdy(in.position.xyz);
-    float3 normal = normalize(cross(dpdx, dpdy));
+    float3 normal = normalize(in.normal);
     float3 lightDir = normalize(float3(1.0, 1.0, 1.0));
     float lightIntensity = saturate(dot(normal, lightDir));
     // Smoothstep the lighting to help push the shadows a bit for visibility.
