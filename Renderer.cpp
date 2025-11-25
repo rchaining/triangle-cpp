@@ -84,6 +84,7 @@ void Renderer::buildShaders() {
     postDesc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
     postDesc->setDepthAttachmentPixelFormat(MTL::PixelFormatInvalid); // Post-process does not use depth testing, b/c flat image
 
+    _postPipelineState = _device->newRenderPipelineState(postDesc, &error);
     // Cleanup
     depthDesc->release();
     vertexFn->release();
@@ -97,7 +98,6 @@ void Renderer::buildShaders() {
     postVertFn->release();
     postFragFn->release();
     postDesc->release();
-    pError->release();
 }
 
 void Renderer::buildBuffers() {
@@ -159,7 +159,7 @@ void Renderer::draw(CA::MetalLayer* layer) {
     // Set uniforms and encode first pass
     MTL::RenderCommandEncoder* enc1 = cmdBuf->renderCommandEncoder(pass1);
     enc1->setRenderPipelineState(_pipelineState);
-    enc1->setVertexBuffer(_vertexBuffer, 0, 0);
+    enc1->setDepthStencilState(_depthStencilState);
     _angle += _angleDelta;
     Uniforms u = makeRotation(_angle);
     
@@ -193,7 +193,7 @@ void Renderer::draw(CA::MetalLayer* layer) {
 void Renderer::buildFirstPassTex() {
     // Depth texture
     // Match window size -- make configurable or read window size dynamically
-    int l, w = 1000;
+    int l = 1000, w = 1000;
     MTL::TextureDescriptor* depthDesc = MTL::TextureDescriptor::texture2DDescriptor(MTL::PixelFormatDepth32Float, l, w, false);
     depthDesc->setUsage(MTL::TextureUsageRenderTarget);
     depthDesc->setStorageMode(MTL::StorageModePrivate); // GPU only
